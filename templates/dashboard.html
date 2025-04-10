@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>PostgreSQL Monitoring Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+    <h1>PostgreSQL Monitoring Dashboard</h1>
+    <p>Active connections: {{.Connections}}</p>
+    <p>Database size: {{.DatabaseSize}}</p>
+    <p>Long running queries (> 5 seconds): {{.LongRunningQueries}}</p>
+
+    <h2>Database Size Visualization</h2>
+    <div id="dbSizeChartContainer" data-used="{{ .DatabaseSizeBytes }}" data-total="5000000000">
+        <canvas id="dbSizeChart" width="400" height="400"></canvas>
+    </div>
+
+    <script type="text/javascript">
+        const container = document.getElementById('dbSizeChartContainer');
+        const usedSize = Number(container.getAttribute('data-used'));
+        const totalSize = Number(container.getAttribute('data-total'));
+
+        const ctx = document.getElementById('dbSizeChart').getContext('2d');
+        new Chart(ctx, {
+            type: 'doughnut',
+            data: {
+                labels: ['Used', 'Free'],
+                datasets: [{
+                    data: [usedSize, totalSize - usedSize],
+                    backgroundColor: ['#FF6384', '#36A2EB']
+                }]
+            },
+            options: {
+                responsive: true,
+                plugins: {
+                    legend: {
+                        position: 'bottom',
+                    },
+                    title: {
+                        display: true,
+                        text: 'Database Size'
+                    }
+                }
+            }
+        });
+    </script>
+</body>
+</html>
