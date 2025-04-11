@@ -4,46 +4,155 @@
     <meta charset="UTF-8">
     <title>PostgreSQL Monitoring Dashboard</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        .dashboard-container {
+            display: flex;
+            justify-content: space-around;
+            flex-wrap: wrap;
+        }
+
+        .dashboard-section {
+            text-align: center;
+            width: 45%;
+        }
+
+        .tooltip {
+            position: relative;
+            cursor: pointer;
+            border-bottom: 1px dotted gray;
+        }
+
+        .tooltip .tooltiptext {
+            visibility: hidden;
+            width: 220px;
+            background-color: gray;
+            color: #fff;
+            text-align: center;
+            border-radius: 6px;
+            padding: 5px;
+            position: absolute;
+            z-index: 1;
+            bottom: 125%;
+            left: 50%;
+            margin-left: -110px;
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+
+        .tooltip:hover .tooltiptext {
+            visibility: visible;
+            opacity: 1;
+        }
+
+    </style>
 </head>
 <body>
     <h1>PostgreSQL Monitoring Dashboard</h1>
     <p>Active connections: {{.Connections}}</p>
-    <p>Database size: {{.DatabaseSize}}</p>
+    <p>Database size (logical): {{.DatabaseSize}}</p>
     <p>Long running queries (> 5 seconds): {{.LongRunningQueries}}</p>
 
-    <h2>Database Size Visualization</h2>
-    <div id="dbSizeChartContainer" data-used="{{ .DatabaseSizeBytes }}" data-total="5000000000">
-        <canvas id="dbSizeChart" width="400" height="400"></canvas>
+    <div class="dashboard-container">
+        <!-- Logical DB Size -->
+        <div class="dashboard-section">
+            <h2>
+                <span class="tooltip">
+                    Database Size Visualization (Logical)
+                    <span class="tooltiptext">Logical size is the total size of database objects: tables, indexes, etc. (from PostgreSQL metadata)</span>
+                </span>
+            </h2>
+            <div id="dbSizeChartContainer" data-used="{{ .DatabaseSizeBytes }}" data-total="5000000000">
+                <canvas id="dbSizeChart" width="200" height="200"></canvas>
+            </div>
+            <div>
+                <p>Used space (logical): <span id="usedSpaceText"></span></p>
+                <p>Free space (logical): <span id="freeSpaceText"></span></p>
+            </div>
+        </div>
+
+        <!-- Physical Container Size -->
+        <div class="dashboard-section">
+            <h2>
+                <span class="tooltip">
+                    Container Disk Usage (Physical)
+                    <span class="tooltiptext">Physical size is the real disk usage of the container data directory on the host machine</span>
+                </span>
+            </h2>
+            <div id="containerSizeChartContainer" data-used="{{ .ContainerSizeBytes }}" data-total="5000000000">
+                <canvas id="containerSizeChart" width="200" height="200"></canvas>
+            </div>
+            <div>
+                <p>Used space (physical): <span id="containerUsedSpaceText"></span></p>
+                <p>Free space (physical): <span id="containerFreeSpaceText"></span></p>
+            </div>
+        </div>
     </div>
 
     <script type="text/javascript">
-        const container = document.getElementById('dbSizeChartContainer');
-        const usedSize = Number(container.getAttribute('data-used'));
-        const totalSize = Number(container.getAttribute('data-total'));
+        function formatBytes(bytes) {
+            const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
+            if (bytes === 0) return '0 Bytes';
+            const i = Math.floor(Math.log(bytes) / Math.log(1024));
+            return parseFloat((bytes / Math.pow(1024, i)).toFixed(2)) + ' ' + sizes[i];
+        }
 
-        const ctx = document.getElementById('dbSizeChart').getContext('2d');
-        new Chart(ctx, {
-            type: 'doughnut',
-            data: {
-                labels: ['Used', 'Free'],
-                datasets: [{
-                    data: [usedSize, totalSize - usedSize],
-                    backgroundColor: ['#FF6384', '#36A2EB']
-                }]
-            },
-            options: {
-                responsive: true,
-                plugins: {
-                    legend: {
-                        position: 'bottom',
-                    },
-                    title: {
-                        display: true,
-                        text: 'Database Size'
+        function formatPercentage(value, total) {
+            return ((value / total) * 100).toFixed(2) + '%';
+        }
+
+        function renderChart(containerId, usedSize, totalSize, usedTextId, freeTextId) {
+            const freeSize = totalSize - usedSize;
+
+            document.getElementById(usedTextId).textContent = formatBytes(usedSize) + ' (' + formatPercentage(usedSize, totalSize) + ')';
+            document.getElementById(freeTextId).textContent = formatBytes(freeSize) + ' (' + formatPercentage(freeSize, totalSize) + ')';
+
+            const ctx = document.getElementById(containerId).getContext('2d');
+            new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: ['Used', 'Free'],
+                    datasets: [{
+                        data: [usedSize, freeSize],
+                        backgroundColor: ['#FF6384', '#36A2EB']
+                    }]
+                },
+                options: {
+                    responsive: false,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'bottom',
+                        },
+                        title: {
+                            display: true,
+                            text: containerId === 'dbSizeChart' ? 'Database Size (Logical)' : 'Container Disk Usage (Physical)'
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    const label = context.label || '';
+                                    const value = context.raw;
+                                    const percentage = formatPercentage(value, totalSize);
+                                    return label + ': ' + formatBytes(value) + ' (' + percentage + ')';
+                                }
+                            }
+                        }
                     }
                 }
-            }
-        });
+            });
+        }
+
+        // Logical DB size
+        const dbContainer = document.getElementById('dbSizeChartContainer');
+        const dbUsedSize = Number(dbContainer.getAttribute('data-used'));
+        const dbTotalSize = Number(dbContainer.getAttribute('data-total'));
+        renderChart('dbSizeChart', dbUsedSize, dbTotalSize, 'usedSpaceText', 'freeSpaceText');
+
+        // Physical container size
+        const containerContainer = document.getElementById('containerSizeChartContainer');
+        const containerUsedSize = Number(containerContainer.getAttribute('data-used'));
+        const containerTotalSize = Number(containerContainer.getAttribute('data-total'));
+        renderChart('containerSizeChart', containerUsedSize, containerTotalSize, 'containerUsedSpaceText', 'containerFreeSpaceText');
     </script>
 </body>
 </html>
