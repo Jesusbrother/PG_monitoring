@@ -27,27 +27,3 @@ func initDB(cfg Config) *sql.DB {
 	log.Println("Database connected successfully")
 	return db
 }
-
-func getActiveConnections(db *sql.DB) (int, error) {
-	var count int
-	err := db.QueryRow(`SELECT count(*) FROM pg_stat_activity;`).Scan(&count)
-	return count, err
-}
-
-func getDatabaseSize(db *sql.DB) (string, error) {
-	var size string
-	err := db.QueryRow(`SELECT pg_size_pretty(pg_database_size(current_database()));`).Scan(&size)
-	return size, err
-}
-
-func getDatabaseSizeBytes(db *sql.DB) (int64, error) {
-	var sizeBytes int64
-	err := db.QueryRow(`SELECT pg_database_size(current_database());`).Scan(&sizeBytes)
-	return sizeBytes, err
-}
-
-func getLongRunningQueriesCount(db *sql.DB) (int, error) {
-	var count int
-	err := db.QueryRow(`SELECT count(*) FROM pg_stat_activity WHERE state = 'active' AND now() - query_start > interval '5 seconds';`).Scan(&count)
-	return count, err
-}
