@@ -1,31 +1,51 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
+    <meta charset="UTF-8" />
     <title>PostgreSQL Monitoring Dashboard</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
-        .dashboard-container {
-            display: flex;
-            justify-content: space-around;
-            flex-wrap: wrap;
+        body {
+            font-family: sans-serif;
+            background: #f4f4f9;
+            margin: 0;
+            padding: 20px;
         }
 
-        .dashboard-section {
+        h1 {
             text-align: center;
-            width: 45%;
+        }
+
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin-top: 20px;
+        }
+
+        .card {
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+            padding: 20px;
+            text-align: center;
+        }
+
+        .card h2 {
+            font-size: 1.2em;
+            margin-bottom: 10px;
         }
 
         .tooltip {
             position: relative;
             cursor: pointer;
-            border-bottom: 1px dotted gray;
+            border-bottom: 1px dotted black;
         }
 
         .tooltip .tooltiptext {
             visibility: hidden;
             width: 220px;
-            background-color: gray;
+            background-color: black;
             color: #fff;
             text-align: center;
             border-radius: 6px;
@@ -43,52 +63,71 @@
             visibility: visible;
             opacity: 1;
         }
-
     </style>
 </head>
 <body>
     <h1>PostgreSQL Monitoring Dashboard</h1>
-    <p>Active connections: {{.Connections}}</p>
-    <p>Database size (logical): {{.DatabaseSize}}</p>
-    <p>Long running queries (> 5 seconds): {{.LongRunningQueries}}</p>
 
-    <div class="dashboard-container">
-        <!-- Logical DB Size -->
-        <div class="dashboard-section">
-            <h2>
-                <span class="tooltip">
-                    Database Size Visualization (Logical)
-                    <span class="tooltiptext">Logical size is the total size of database objects: tables, indexes, etc. (from PostgreSQL metadata)</span>
-                </span>
+    <div class="dashboard-grid">
+        <!-- Active Connections -->
+        <div class="card">
+            <h2>Active Connections</h2>
+            <p>{{.Connections}}</p>
+        </div>
+
+        <!-- Long Running Queries -->
+        <div class="card">
+            <h2>Long Running Queries</h2>
+            <p>{{.LongRunningQueries}}</p>
+        </div>
+
+        <!-- Database Size Logical -->
+        <div class="card">
+            <h2 class="tooltip">
+                Database Size (Logical)
+                <span class="tooltiptext">Logical size is the total size of database objects: tables, indexes, etc.</span>
             </h2>
             <div id="dbSizeChartContainer" data-used="{{ .DatabaseSizeBytes }}" data-total="5000000000">
                 <canvas id="dbSizeChart" width="200" height="200"></canvas>
             </div>
-            <div>
-                <p>Used space (logical): <span id="usedSpaceText"></span></p>
-                <p>Free space (logical): <span id="freeSpaceText"></span></p>
-            </div>
+            <p>Used: <span id="usedSpaceText"></span></p>
+            <p>Free: <span id="freeSpaceText"></span></p>
         </div>
 
-        <!-- Physical Container Size -->
-        <div class="dashboard-section">
-            <h2>
-                <span class="tooltip">
-                    Container Disk Usage (Physical)
-                    <span class="tooltiptext">Physical size is the real disk usage of the container data directory on the host machine</span>
-                </span>
+        <!-- Container Disk Usage Physical -->
+        <div class="card">
+            <h2 class="tooltip">
+                Container Disk Usage (Physical)
+                <span class="tooltiptext">Physical size is the real disk usage of the container data directory.</span>
             </h2>
             <div id="containerSizeChartContainer" data-used="{{ .ContainerSizeBytes }}" data-total="5000000000">
                 <canvas id="containerSizeChart" width="200" height="200"></canvas>
             </div>
-            <div>
-                <p>Used space (physical): <span id="containerUsedSpaceText"></span></p>
-                <p>Free space (physical): <span id="containerFreeSpaceText"></span></p>
-            </div>
+            <p>Used: <span id="containerUsedSpaceText"></span></p>
+            <p>Free: <span id="containerFreeSpaceText"></span></p>
+        </div>
+
+        <!-- RAM Usage -->
+        <div class="card">
+            <h2 class="tooltip">
+                RAM Usage
+                <span class="tooltiptext">Container memory usage inside Docker container.</span>
+            </h2>
+            <p>Used: {{ .RAMUsed }} bytes</p>
+            <p>Total: {{ .RAMTotal }} bytes</p>
+        </div>
+
+        <!-- WAL Size -->
+        <div class="card">
+            <h2 class="tooltip">
+                WAL Size
+                <span class="tooltiptext">Write-Ahead Logging directory total size.</span>
+            </h2>
+            <p>{{ .WALSize }} bytes</p>
         </div>
     </div>
 
-    <script type="text/javascript">
+    <script>
         function formatBytes(bytes) {
             const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
             if (bytes === 0) return '0 Bytes';
@@ -120,13 +159,7 @@
                     responsive: false,
                     maintainAspectRatio: false,
                     plugins: {
-                        legend: {
-                            position: 'bottom',
-                        },
-                        title: {
-                            display: true,
-                            text: containerId === 'dbSizeChart' ? 'Database Size (Logical)' : 'Container Disk Usage (Physical)'
-                        },
+                        legend: { position: 'bottom' },
                         tooltip: {
                             callbacks: {
                                 label: function(context) {
@@ -142,17 +175,23 @@
             });
         }
 
-        // Logical DB size
         const dbContainer = document.getElementById('dbSizeChartContainer');
-        const dbUsedSize = Number(dbContainer.getAttribute('data-used'));
-        const dbTotalSize = Number(dbContainer.getAttribute('data-total'));
-        renderChart('dbSizeChart', dbUsedSize, dbTotalSize, 'usedSpaceText', 'freeSpaceText');
+        renderChart(
+            'dbSizeChart',
+            Number(dbContainer.getAttribute('data-used')),
+            Number(dbContainer.getAttribute('data-total')),
+            'usedSpaceText',
+            'freeSpaceText'
+        );
 
-        // Physical container size
         const containerContainer = document.getElementById('containerSizeChartContainer');
-        const containerUsedSize = Number(containerContainer.getAttribute('data-used'));
-        const containerTotalSize = Number(containerContainer.getAttribute('data-total'));
-        renderChart('containerSizeChart', containerUsedSize, containerTotalSize, 'containerUsedSpaceText', 'containerFreeSpaceText');
+        renderChart(
+            'containerSizeChart',
+            Number(containerContainer.getAttribute('data-used')),
+            Number(containerContainer.getAttribute('data-total')),
+            'containerUsedSpaceText',
+            'containerFreeSpaceText'
+        );
     </script>
 </body>
 </html>
