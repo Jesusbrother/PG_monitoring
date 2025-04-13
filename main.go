@@ -3,12 +3,21 @@ package main
 import (
 	"log"
 	"net/http"
+	"time"
 )
 
 func main() {
 	cfg := loadConfig()
 	db := initDB(cfg)
 	defer db.Close()
+
+	// Start background monitoring goroutine
+	go func() {
+		for {
+			collectAndInsertMetrics(db, cfg.LogIntervalMinutes)
+			time.Sleep(time.Duration(cfg.LogIntervalMinutes) * time.Minute) // hardcode now (#todo time.Ticker)
+		}
+	}()
 
 	http.HandleFunc("/", dashboardHandler(db))
 
